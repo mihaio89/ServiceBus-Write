@@ -6,16 +6,22 @@ using Azure.Messaging.ServiceBus;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 
-namespace ServiceBus
-{
+namespace ServiceBus;
+
     class Program
     {
-        static string gk_suffix = "";
+
+        static string connectionString;
+        static string queueName;
+
+        static string file;
         static async Task Main(string[] args)
         {
            // string currentDateTime= DateTime.Now.ToString("yyyyMMddHHmmssfff");
           //  Console.WriteLine(currentDateTime);
           //  var stopwatch = Stopwatch.StartNew();
+
+         if (args.Length != 0) { file = args[0]; };
             
             // Load the configuration file
             var configuration = new ConfigurationBuilder()
@@ -25,12 +31,20 @@ namespace ServiceBus
                 .Build();
 
             // Get the configuration values
-            var connectionString = configuration["ServiceBus:ServiceBusConnectionString"];
-            var queueName = configuration["ServiceBus:QueueName"];
+            connectionString = configuration["ServiceBus:ServiceBusConnectionString"];
+            queueName = configuration["ServiceBus:QueueName"];
 
+        //  await Test(args);
+            await ForDispatch();
 
-            // Read the message JSON from file
-            var messageJson = await File.ReadAllTextAsync("message.json");
+        }
+
+        static async Task Test(string[] args) 
+        {
+
+            string gk_suffix = "";
+            var input = "test.json";
+            var messageJson = await File.ReadAllTextAsync(input);
 
             
             int total = int.Parse(args[0]);
@@ -58,7 +72,7 @@ namespace ServiceBus
             //   Console.WriteLine(updatedMessageJson);
 
                 // Parse the message JSON into a JObject
-                var messageObject = JObject.Parse(updatedMessageJson);
+              //  var messageObject = JObject.Parse(updatedMessageJson);
 
                 // Get the session ID from the "ID" attribute of the message
                 var sessionId = gk_suffix; //(string)messageObject["it_bit_it"][0]["ID"];
@@ -84,5 +98,58 @@ namespace ServiceBus
           //  stopwatch.Stop();
            // Console.WriteLine($"Elapsed time: {stopwatch.ElapsedMilliseconds} ms");
         }
+
+        static async Task ForDispatch() 
+        {
+            const string gk_suffix = "11";
+            string currentDateTime = DateTime.Now.ToString("yyyyMMddHHmmsss");
+
+            string input;
+        
+            switch (file)
+            {
+                case "m":
+                    input = "collector_bp_mixed.json";
+                    break;
+                case "n":
+                    input = "collector_bp_not_exist.json";
+                    break;
+                case "2":
+                     input = "collector_2bp_exist.json";
+                    break;
+                default:
+                    input = "collector.json";
+                    break;
+            }
+
+            var messageJson = await File.ReadAllTextAsync(input);
+
+
+                Guid guid = Guid.NewGuid();
+                string guidString = guid.ToString("N") + "-" + gk_suffix;
+
+                string updatedMessageJson = messageJson
+                        .Replace("ZYYYYMMDD", currentDateTime);
+                      //  .Replace("VALUE-GK", guidString);
+
+
+                var sessionId = gk_suffix; 
+
+                // Create a ServiceBusClient and a ServiceBusSender
+                await using var client = new ServiceBusClient(connectionString);
+                await using var sender = client.CreateSender(queueName);
+
+                // Create a ServiceBusMessage with the message body and session ID
+                var messageBody = updatedMessageJson;
+                var message = new ServiceBusMessage(messageBody)
+                {
+                    SessionId = sessionId
+                };
+
+                // Send the message and print a confirmation message
+                await sender.SendMessageAsync(message);
+
+                Console.WriteLine($"sent message SessionId: '{sessionId}' : srctaid = '{currentDateTime}'");//, GK = '{guidString}'");
+
+        }
     }
-}
